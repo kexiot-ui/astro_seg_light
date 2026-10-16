@@ -1,0 +1,11 @@
+# Зависимости проекта astro_seg_light (сняты с conda-окружения astro_seg, 2026-08)
+# Установка:  conda activate astro_seg && pip install -r requirements.txt
+torch==2.5.1
+torchvision==0.20.1
+segmentation-models-pytorch==0.5.0
+albumentations==2.0.8
+numpy==2.0.1
+scipy==1.15.3
+Pillow==11.1.0
+opencv-python==5.0.0
+tifffile==2025.5.10

@@ -1,0 +1,29 @@
+# ---- Archives (raw dataset / mask packs, multi-GB) ----
+*.rar
+
+# ---- Datasets & raw inputs (regenerable / external) ----
+GFAP_irr_study/
+data/
+new_masks/
+
+# ---- Segmentation & analysis OUTPUTS (produced by the pipeline) ----
+GFAP_irr_study_seg_*/
+
+# ---- IDE / tooling ----
+.idea/
+outputs/
+outputs_debug/
+
+# ---- Agent memory (WorkBuddy) ----
+.workbuddy-ai/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# ---- OS ----
+Thumbs.db
+Desktop.ini
+.DS_Store

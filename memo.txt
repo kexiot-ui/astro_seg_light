@@ -1,0 +1,1 @@
+python src/predict_all.py --input "D:/astro_seg_light/GFAP_irr_study"
