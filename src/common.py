@@ -60,10 +60,11 @@ def load_model_and_meta(model_path, device, verbose_prefix=""):
     if len(channel_names) != n_classes:
         channel_names = [f"class_{i}" for i in range(n_classes)]
     is_gfap = (channel_names == ["mask", "bound"])  # наша задача: маска + границы
-    # Одноканальная модель (n_classes==1, напр. focus1: ['mask']) — бинарная маска
-    # "in-focus" (высокая вероятность = в фокусе). Не путать с multi-class тканью
-    # (white_and_grey, n_classes>=2) и с GFAP (['mask','bound']).
-    is_focus = (n_classes == 1)
+    # Одноканальная модель (n_classes==1, ['mask']) даёт бинарную вероятностную маску.
+    # Обобщённый путь для любых одиночных бинарных чекпоинтов, не привязанный
+    # к конкретной задаче. Не путать с multi-class тканью (n_classes>=2)
+    # и с GFAP (['mask','bound']).
+    is_binary = (n_classes == 1)
 
     tile_meta = {
         "tile_size": ckpt.get("tile_size", TILE_SIZE_DEFAULT),
@@ -72,7 +73,7 @@ def load_model_and_meta(model_path, device, verbose_prefix=""):
         "n_classes": n_classes,
         "channel_names": channel_names,
         "is_gfap": is_gfap,
-        "is_focus": is_focus,
+        "is_binary": is_binary,
         "mask_thr": float(ckpt.get("mask_thr", MASK_THR_DEFAULT)),
     }
 
@@ -82,8 +83,8 @@ def load_model_and_meta(model_path, device, verbose_prefix=""):
 
     if is_gfap:
         task_label = "GFAP[mask,bound]"
-    elif is_focus:
-        task_label = "focus[in-focus mask]"
+    elif is_binary:
+        task_label = "binary[mask]"
     else:
         task_label = "multi-class"
     print(f"{verbose_prefix}Загружен чекпоинт: in_channels={in_ch} n_classes={n_classes} "

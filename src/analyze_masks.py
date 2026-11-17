@@ -2,38 +2,32 @@ r"""
 analyze_masks.py — этап АНАЛИЗА масок в пайплайне astro_seg_light.
 
 Адаптирован из C:/Users/Vanya_meduha/Desktop/Astrocyte_Analysis_Toolkit/astrocyte_analyzer.py,
-но сделан tissue-aware И focus-aware: теперь учитывает
-  - целочисленную метку-карту ткани (серое/белое вещество/просвет) и
-  - целочисленную метку-карту фокуса (0=расфокус, 1=в фокусе),
-и считает метрики астроцитов в ВЫБРАННОЙ ОБЛАСТИ, отрезая просвет и расфокус.
+но сделан tissue-aware: учитывает целочисленную метку-карту ткани
+(серое / белое вещество / просвет) и считает метрики астроцитов в ВЫБРАННОЙ
+ОБЛАСТИ, отрезая просвет.
+
+Модель фокуса/расфокуса исключена из пайплайна (недостаточная доработка
+чекпоинта). Оценка резкости более не применяется, ограничение по фокусу
+полностью убрано.
 
 Вход:
   --masks  дерево БИНАРНЫХ масок астроцитов (вых. predict_tree с GFAP-моделью, astro_*.pth).
   --tissue дерево ЦЕЛОЧИСЛЕННЫХ меток-карт *_label.png (вых. predict_tree с white_and_grey.pth).
            Семантика: 0=просвет, 1=серое вещество, 2=белое вещество.
-  --focus  дерево ЦЕЛОЧИСЛЕННЫХ меток-карт *_label.png (вых. predict_tree с focus1.pth).
-           Семантика: 0=расфокус, 1=в фокусе (задаётся --focus_in_code).
   --region {all, tissue, gray, white}  (по умолчанию all)
            all    — по всей маске астроцитов
            tissue — исключая просвет (label != 0)
            gray   — только label == 1 (серое вещество)
            white  — только label == 2 (белое вещество)
-  --focus_region {all, infocus, defocus}  (по умолчанию infocus)
-           all     — без ограничения по фокусу
-           infocus — только в фокусе (focus == --focus_in_code)
-           defocus — только расфокус (focus != --focus_in_code)
-  --focus_in_code  int (по умолчанию 1) — какой код метки фокуса = "в фокусе".
   --min_area  мин. площадь компоненты (px), по умолчанию 100.
   --out       куда писать результаты (по умолчанию <masks>_analysis).
 
 Типичный сценарий (пайплайн predict_all.py):
-  считать астроциты в СЕРОМ в ФОКУСЕ:
-    --region gray  --focus_region infocus
-  считать астроциты в БЕЛОМ в ФОКУСЕ:
-    --region white --focus_region infocus
-  -> просвет (tissue=0) и расфокус исключаются автоматически (считать их нет нужды).
+  считать астроциты в СЕРОМ веществе:  --region gray
+  считать астроциты в БЕЛОМ веществе:  --region white
+  -> просвет (tissue=0) исключается автоматически.
 
-  Выход:
+Выход:
   - Global_Metrics.csv / Cell_Metrics.csv — всегда (без внешних зависимостей).
   - Astrocyte_Analysis_Results.xlsx (Global_Metrics + Cell_Metrics) — ВСЕГДА,
     через xlsx_writer (чистый стандартный Python, без pandas/openpyxl).
@@ -61,7 +55,6 @@ REGION_NAMES = {
     "gray": "Gray matter",
     "white": "White matter",
 }
-FOCUS_SUFFIX = {"all": "", "infocus": " (in focus)", "defocus": " (defocus)"}
 
 
 def calculate_fd_lacunarity(img, min_size=2):
@@ -107,7 +100,7 @@ def calculate_fd_lacunarity(img, min_size=2):
 
 def analyze_one(mask_bin, region_mask, region_label, min_area, img_name, out_dir):
     """Считает метрики астроцитов на mask_bin, ограниченном region_mask (0/255 или None).
-    region_label — строка для колонки Region в отчёте (уже с учётом ткани и фокуса)."""
+    region_label — строка для колонки Region в отчёте."""
     if region_mask is None:
         restricted = mask_bin.copy()
     else:
@@ -180,8 +173,7 @@ def analyze_one(mask_bin, region_mask, region_label, min_area, img_name, out_dir
     return global_metric, cell_metrics
 
 
-def run_analysis(masks_root, tissue_root=None, focus_root=None, region="all",
-                 focus_region="infocus", focus_in_code=1, min_area=100, out_dir=None):
+def run_analysis(masks_root, tissue_root=None, region="all", min_area=100, out_dir=None):
     masks_root = os.path.abspath(masks_root)
     if not os.path.isdir(masks_root):
         raise FileNotFoundError(f"Нет папки масок: {masks_root}")
@@ -189,28 +181,22 @@ def run_analysis(masks_root, tissue_root=None, focus_root=None, region="all",
     os.makedirs(out_dir, exist_ok=True)
 
     tissue_root = os.path.abspath(tissue_root) if tissue_root else None
-    focus_root = os.path.abspath(focus_root) if focus_root else None
 
     if region != "all" and tissue_root is None:
         print(f"Внимание: регион '{region}' требует --tissue (метки-карты ткани). "
               f"Анализ пойдёт по всей маске (region=all).")
         region = "all"
-    if focus_region != "all" and focus_root is None:
-        print(f"Внимание: focus_region='{focus_region}' требует --focus (метки-карты фокуса). "
-              f"Анализ пойдёт без ограничения по фокусу.")
-        focus_region = "all"
 
     mask_files = find_images_recursive(masks_root)
     if not mask_files:
         print(f"Внимание: в '{masks_root}' нет изображений.")
         return
 
-    focus_suffix = FOCUS_SUFFIX.get(focus_region, "")
-    region_label = REGION_NAMES[region] + focus_suffix
+    region_label = REGION_NAMES[region]
 
-    print(f"Device: masks={masks_root}\n"
-          f"tissue={tissue_root}\nfocus={focus_root}\n"
-          f"region={REGION_NAMES[region]} | focus_region={focus_region} (in_code={focus_in_code})\n"
+    print(f"masks={masks_root}\n"
+          f"tissue={tissue_root}\n"
+          f"region={region_label}\n"
           f"min_area={min_area}\nout={out_dir}\nфайлов: {len(mask_files)}")
 
     global_metrics = []
@@ -225,10 +211,8 @@ def run_analysis(masks_root, tissue_root=None, focus_root=None, region="all",
             continue
         _, mask_bin = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
 
+        # --- ограничение по ткани: серое (1) / белое (2), просвет (0) исключаем ---
         region_mask = None
-        focus_mask = None
-
-        # --- ограничение по ткани (серое/белое/просвет) ---
         if tissue_root is not None and region != "all":
             stem = os.path.splitext(rel)[0]
             label_rel = stem + "_label.png"
@@ -243,32 +227,8 @@ def run_analysis(masks_root, tissue_root=None, focus_root=None, region="all",
                     code = REGION_CODES[region]
                     region_mask = (label == code).astype(np.uint8) * 255
 
-        # --- ограничение по фокусу (в фокусе / расфокус) ---
-        if focus_root is not None and focus_region != "all":
-            stem = os.path.splitext(rel)[0]
-            flabel_rel = stem + "_label.png"
-            flabel_path = os.path.join(focus_root, flabel_rel)
-            if not os.path.exists(flabel_path):
-                print(f"  нет метки-карты фокуса для {rel} (ожидалось {flabel_rel}) -> без ограничения по фокусу")
-            else:
-                fl = cv2.imread(flabel_path, cv2.IMREAD_GRAYSCALE)
-                if focus_region == "infocus":
-                    focus_mask = (fl == focus_in_code).astype(np.uint8) * 255
-                else:  # defocus
-                    focus_mask = (fl != focus_in_code).astype(np.uint8) * 255
-
-        # --- комбинируем оба ограничения (логическое И) ---
-        if region_mask is not None and focus_mask is not None:
-            combined = (region_mask & focus_mask).astype(np.uint8)
-        elif region_mask is not None:
-            combined = region_mask
-        elif focus_mask is not None:
-            combined = focus_mask
-        else:
-            combined = None
-
         try:
-            g, cells = analyze_one(mask_bin, combined, region_label, min_area, img_name, out_dir)
+            g, cells = analyze_one(mask_bin, region_mask, region_label, min_area, img_name, out_dir)
         except Exception as e:
             # Один проблемный снимок не должен обрывать весь пакет (1811 изображений).
             print(f"  [ОШИБКА] {rel}: {type(e).__name__}: {e} -> пропущено")
@@ -330,21 +290,14 @@ def main():
                     help="дерево бинарных масок астроцитов (вых. predict_tree с GFAP-моделью)")
     ap.add_argument("--tissue", default=None,
                     help="дерево меток-карт ткани *_label.png (вых. predict_tree с white_and_grey.pth)")
-    ap.add_argument("--focus", default=None,
-                    help="дерево меток-карт фокуса *_label.png (вых. predict_tree с focus1.pth)")
     ap.add_argument("--region", choices=["all", "tissue", "gray", "white"], default="all",
                     help="область ткани: all / tissue(без просвета) / gray / white")
-    ap.add_argument("--focus_region", choices=["all", "infocus", "defocus"], default="infocus",
-                    help="ограничение по фокусу: all / infocus(в фокусе) / defocus(расфокус)")
-    ap.add_argument("--focus_in_code", type=int, default=1,
-                    help="какой код метки фокуса означает 'в фокусе' (по умолчанию 1)")
     ap.add_argument("--min_area", type=int, default=100,
                     help="мин. площадь компоненты (px)")
     ap.add_argument("--out", default=None, help="выходная папка (по умолчанию <masks>_analysis)")
     args = ap.parse_args()
 
-    run_analysis(args.masks, args.tissue, args.focus, args.region,
-                 args.focus_region, args.focus_in_code, args.min_area, args.out)
+    run_analysis(args.masks, args.tissue, args.region, args.min_area, args.out)
 
 
 if __name__ == "__main__":

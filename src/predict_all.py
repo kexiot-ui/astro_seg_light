@@ -1,17 +1,18 @@
 r"""
-predict_all.py — ЕДИНАЯ КОМАНДА: сегментация по трём моделям + авто-анализ.
+predict_all.py — ЕДИНАЯ КОМАНДА: сегментация по ДВУМ моделям + авто-анализ.
 
-Гонит по одному дереву RGB-изображений сразу три модели:
-  1. Астроциты (GFAP)        -> models/astro_2.pth     (бинарная маска),   выход <base>_astro
-  2. Ткань (серое/белое/      -> models/white_and_grey.pth (цвет + метка), выход <base>_tissue
-     просвет)
-  3. Фокус (в фокусе/         -> models/focus1.pth     (бинарная + метка), выход <base>_focus
-     расфокус)
+Гонит по одному дереву RGB-изображений две модели:
+  1. Астроциты (GFAP) -> models/astro_2.pth         (бинарная маска), выход <base>_astro
+  2. Ткань            -> models/white_and_grey.pth  (цвет + метка),  выход <base>_tissue
+     (просвет / серое вещество / белое вещество)
 
-Затем автоматически считает астроциты:
-  - в СЕРОМ веществе В ФОКУСЕ  -> <base>_analysis/gray_focus
-  - в БЕЛОМ веществе В ФОКУСЕ  -> <base>_analysis/white_focus
-Просвет (tissue=0) и расфокус исключаются автоматически — считать их нет нужды.
+Затем автоматически считает астроциты РАЗДЕЛЬНО:
+  - в СЕРОМ веществе -> <base>_analysis/gray
+  - в БЕЛОМ веществе -> <base>_analysis/white
+Просвет (tissue=0) исключается автоматически.
+
+Модель фокуса/расфокуса исключена из пайплайна (недостаточная доработка
+чекпоинта); оценка резкости более не применяется.
 
 Пример (одна команда делает всё):
   python src/predict_all.py --input "D:/astro_seg_light/GFAP_irr_study"
@@ -29,7 +30,6 @@ from analyze_masks import run_analysis
 
 DEFAULT_ASTRO = "models/astro_2.pth"
 DEFAULT_WHITE_GREY = "models/white_and_grey.pth"
-DEFAULT_FOCUS = "models/focus1.pth"
 
 
 def main():
@@ -37,7 +37,6 @@ def main():
     ap.add_argument("--input", required=True, help="корень дерева RGB-изображений")
     ap.add_argument("--astro", default=DEFAULT_ASTRO, help="модель астроцитов (GFAP), .pth")
     ap.add_argument("--white_grey", default=DEFAULT_WHITE_GREY, help="модель ткани, .pth")
-    ap.add_argument("--focus", default=DEFAULT_FOCUS, help="модель фокуса, .pth")
     ap.add_argument("--out", default=None,
                     help="базовая папка выхода (по умолчанию <input>_seg)")
     ap.add_argument("--min_area", type=int, default=100, help="мин. площадь компоненты (px)")
@@ -50,35 +49,30 @@ def main():
     base = args.out if args.out else (args.input.rstrip(os.sep) + "_seg")
     astro_out = base + "_astro"
     tissue_out = base + "_tissue"
-    focus_out = base + "_focus"
     analysis_base = base + "_analysis"
 
     print("=" * 72)
-    print("ЭТАП 1: сегментация трёмя моделями")
+    print("ЭТАП 1: сегментация двумя моделями (астроциты + ткань)")
     print("=" * 72)
     predict_run(args.input, args.astro, astro_out,
                 mode=args.mode, skip_existing=args.skip_existing, verbose_prefix="[astro] ")
     predict_run(args.input, args.white_grey, tissue_out,
                 mode=args.mode, skip_existing=args.skip_existing, verbose_prefix="[tissue] ")
-    predict_run(args.input, args.focus, focus_out,
-                mode=args.mode, skip_existing=args.skip_existing, verbose_prefix="[focus] ")
 
     print("\n" + "=" * 72)
-    print("ЭТАП 2: анализ астроцитов (серое / белое вещество В ФОКУСЕ)")
+    print("ЭТАП 2: раздельный анализ астроцитов (серое / белое вещество)")
     print("=" * 72)
     for region in ["gray", "white"]:
-        out_dir = os.path.join(analysis_base, f"{region}_focus")
-        print(f"\n--- астроциты в {region} веществе В ФОКУСЕ ---")
-        run_analysis(astro_out, tissue_out, focus_out, region=region,
-                     focus_region="infocus", focus_in_code=1,
+        out_dir = os.path.join(analysis_base, region)
+        print(f"\n--- астроциты в {region} веществе ---")
+        run_analysis(astro_out, tissue_out, region=region,
                      min_area=args.min_area, out_dir=out_dir)
 
     print("\n" + "=" * 72)
     print("ГОТОВО.")
     print(f"  маски астроцитов : {astro_out}")
     print(f"  маски ткани      : {tissue_out}  (цвет + *_label.png)")
-    print(f"  маски фокуса     : {focus_out}  (бинарь + *_label.png)")
-    print(f"  отчёты анализа   : {analysis_base}/gray_focus  и  {analysis_base}/white_focus")
+    print(f"  отчёты анализа   : {analysis_base}/gray  и  {analysis_base}/white")
     print("=" * 72)
 
 

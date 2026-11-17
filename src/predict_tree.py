@@ -125,19 +125,19 @@ def run(input_dir, model_path, output_dir=None,
                 status = "разделение" if n_after > n_before else "без разделения"
                 print(f"  [{done + skipped:>{n_w}}/{n_total}] {rel}: "
                       f"до={n_before} после={n_after} ({status}) -> {out_path}")
-            elif tile_meta["is_focus"]:
-                # Одноканальная вероятность "in-focus": порог -> бинарная маска,
-                # плюс целочисленная метка 0/1 (1=в фокусе) для analyze_masks.
+            elif tile_meta["is_binary"]:
+                # Обобщённый путь для одноканального чекпоинта: вероятность ->
+                # бинарная маска по порогу из чекпоинта, плюс целочисленная метка 0/1.
                 mask_prob_full = probs_full[0]
                 mthr = tile_meta.get("mask_thr", MASK_THR_DEFAULT)
-                in_focus = (mask_prob_full > mthr)
-                save_mask(out_path, (in_focus.astype(np.uint8) * 255), mode)
+                binary = (mask_prob_full > mthr)
+                save_mask(out_path, (binary.astype(np.uint8) * 255), mode)
                 base, _ext = os.path.splitext(out_path)
                 os.makedirs(os.path.dirname(out_path), exist_ok=True)
-                Image.fromarray(in_focus.astype(np.uint8), mode="L").save(base + "_label.png")
+                Image.fromarray(binary.astype(np.uint8), mode="L").save(base + "_label.png")
                 done += 1
                 print(f"  [{done + skipped:>{n_w}}/{n_total}] {rel}: "
-                      f"focus mask (thr={mthr:.2f}) -> {out_path} + метка {base}_label.png")
+                      f"binary mask (thr={mthr:.2f}) -> {out_path} + метка {base}_label.png")
             else:
                 # Multi-class (серое/белое вещество + просвет): цветная маска
                 # (black->серый, gray->чёрный, white->белый) ПЛЮС целочисленная

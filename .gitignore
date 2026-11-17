@@ -17,6 +17,9 @@ outputs_debug/
 # ---- Agent memory (WorkBuddy) ----
 .workbuddy-ai/
 
+# ---- Patent drafting scratch files (extracted .doc text + docx generator) ----
+_patent_templates/
+
 # ---- Python ----
 __pycache__/
 *.py[cod]

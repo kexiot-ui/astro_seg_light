@@ -6,8 +6,8 @@ csv_to_xlsx.py — пересобрать Astrocyte_Analysis_Results.xlsx из �
 повторного прогона analyze_masks (1811 изображений заново считать не нужно).
 
 Пример:
-  python src/csv_to_xlsx.py "D:/astro_seg_light/GFAP_irr_study_seg_analysis/gray_focus"
-  python src/csv_to_xlsx.py "D:/astro_seg_light/GFAP_irr_study_seg_analysis/white_focus"
+  python src/csv_to_xlsx.py "D:/astro_seg_light/GFAP_irr_study_seg_analysis/gray"
+  python src/csv_to_xlsx.py "D:/astro_seg_light/GFAP_irr_study_seg_analysis/white"
 """
 import os
 import sys
